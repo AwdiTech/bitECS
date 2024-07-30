@@ -235,7 +235,8 @@ var SparseSet = () => {
 var DESERIALIZE_MODE = {
   REPLACE: 0,
   APPEND: 1,
-  MAP: 2
+  MAP: 2,
+  STRICT: 3,
 };
 var resized = false;
 var setSerializationResized = (v) => {
@@ -435,6 +436,11 @@ var defineDeserializer = (target) => {
           newEntities.set(eid, newEid);
           eid = newEid;
         }
+        if (mode === DESERIALIZE_MODE.STRICT && !world[$entitySparseSet].has(eid)) {
+          const newEid = newEntities.get(eid) || addEntity(world, eid);
+          newEntities.set(eid, newEid);
+          eid = newEid;
+        }
         const component = prop[$storeBase]();
         if (!hasComponent(world, component, eid)) {
           addComponent(world, component, eid);
@@ -553,6 +559,22 @@ var addEntity = (world) => {
   world[$entityComponents].set(eid, /* @__PURE__ */ new Set());
   return eid;
 };
+// Overloaded addEntity function that accepts a specified entity ID for strict assignment
+var addEntity = (world, specifiedEid = null) => {
+  const eid = specifiedEid !== null ? specifiedEid : (world[$manualEntityRecycling] ? removed.length ? removed.shift() : globalEntityCursor++ : removed.length > Math.round(globalSize * removedReuseThreshold) ? removed.shift() : globalEntityCursor++);
+  if (eid > world[$size])
+    throw new Error("bitECS - max entities reached");
+  world[$entitySparseSet].add(eid);
+  eidToWorld.set(eid, world);
+  world[$notQueries].forEach((q) => {
+    const match = queryCheckEntity(world, q, eid);
+    if (match)
+      queryAddEntity(q, eid);
+  });
+  world[$entityComponents].set(eid, /* @__PURE__ */ new Set());
+  return eid;
+};
+
 var removeEntity = (world, eid) => {
   if (!world[$entitySparseSet].has(eid))
     return;
